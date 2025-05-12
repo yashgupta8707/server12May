@@ -20,6 +20,7 @@ router.get('/', async (req, res) => {
     
     const quotations = await Quotation.find()
       .populate('party', 'id name phone address')
+      .populate('revision_of', 'quotation_number title') // NEW: Populate revision reference
       .sort({ createdAt: -1 });
     
     console.log(`Retrieved ${quotations.length} quotations`);
@@ -39,6 +40,7 @@ router.get('/party/:partyId', async (req, res) => {
     console.log(`Fetching quotations for party ID: ${req.params.partyId}`);
     const quotations = await Quotation.find({ party: req.params.partyId })
       .populate('party', 'id name phone address')
+      .populate('revision_of', 'quotation_number title') // NEW: Populate revision reference
       .sort({ createdAt: -1 });
     
     console.log(`Retrieved ${quotations.length} quotations for party ${req.params.partyId}`);
@@ -57,7 +59,8 @@ router.get('/:id', async (req, res) => {
     
     console.log(`Fetching quotation by ID: ${req.params.id}`);
     const quotation = await Quotation.findById(req.params.id)
-      .populate('party', 'id name phone address');
+      .populate('party', 'id name phone address')
+      .populate('revision_of', 'quotation_number title'); // NEW: Populate revision reference
     
     if (!quotation) {
       console.log(`Quotation not found: ${req.params.id}`);
@@ -84,6 +87,7 @@ router.post('/', async (req, res) => {
     // Extract main data from request body
     const { 
       party_id,
+      title,                // NEW: Added title field
       business_details,
       items,
       notes,
@@ -92,7 +96,9 @@ router.post('/', async (req, res) => {
       status = 'draft',
       total_amount,
       total_purchase,
-      total_tax
+      total_tax,
+      revision_number,      // NEW: Added revision tracking
+      revision_of          // NEW: Added revision tracking
     } = req.body;
     
     // Validate required fields
@@ -142,6 +148,7 @@ router.post('/', async (req, res) => {
     // Create new quotation with validated data
     const newQuotation = new Quotation({
       party: party_id,
+      title: title || `Quotation for ${party.name}`, // NEW: Set title using party name if not provided
       business_details: {
         name: business_details?.name || "EmpressPC",
         address: business_details?.address || "123 Tech Street, Lucknow, UP 226001",
@@ -167,7 +174,10 @@ router.post('/', async (req, res) => {
       notes: notes || '',
       terms_conditions: terms_conditions || '',
       valid_until: valid_until ? new Date(valid_until) : null,
-      status: status || 'draft'
+      status: status || 'draft',
+      // NEW: Add revision tracking fields if provided
+      revision_number: revision_number || 0,
+      revision_of: revision_of || null
     });
     
     const savedQuotation = await newQuotation.save();
@@ -175,7 +185,8 @@ router.post('/', async (req, res) => {
     
     // Return the newly created quotation with the party details
     const populatedQuotation = await Quotation.findById(savedQuotation._id)
-      .populate('party', 'id name phone address');
+      .populate('party', 'id name phone address')
+      .populate('revision_of', 'quotation_number title'); // NEW: Populate revision reference
     
     res.status(201).json(populatedQuotation);
   } catch (error) {
@@ -194,6 +205,7 @@ router.put('/:id', async (req, res) => {
     
     const { 
       party_id,
+      title,                // NEW: Added title field
       business_details,
       items,
       notes,
@@ -202,7 +214,9 @@ router.put('/:id', async (req, res) => {
       status,
       total_amount,
       total_purchase,
-      total_tax
+      total_tax,
+      revision_number,      // NEW: Added revision tracking
+      revision_of          // NEW: Added revision tracking
     } = req.body;
     
     // Find the quotation
@@ -223,11 +237,16 @@ router.put('/:id', async (req, res) => {
     }
     
     // Update fields if provided
+    if (title) quotation.title = title; // NEW: Update title
     if (business_details) quotation.business_details = business_details;
     if (notes !== undefined) quotation.notes = notes;
     if (terms_conditions !== undefined) quotation.terms_conditions = terms_conditions;
     if (valid_until) quotation.valid_until = new Date(valid_until);
     if (status) quotation.status = status;
+    
+    // NEW: Update revision tracking fields if provided
+    if (revision_number !== undefined) quotation.revision_number = revision_number;
+    if (revision_of !== undefined) quotation.revision_of = revision_of;
     
     // Update items and recalculate totals if provided
     if (items && Array.isArray(items)) {
@@ -264,7 +283,8 @@ router.put('/:id', async (req, res) => {
     
     // Return the updated quotation with the party details
     const populatedQuotation = await Quotation.findById(updatedQuotation._id)
-      .populate('party', 'id name phone address');
+      .populate('party', 'id name phone address')
+      .populate('revision_of', 'quotation_number title'); // NEW: Populate revision reference
     
     res.json(populatedQuotation);
   } catch (error) {

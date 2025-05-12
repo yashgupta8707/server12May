@@ -47,6 +47,10 @@ const quotationSchema = new mongoose.Schema({
     type: String,
     unique: true
   },
+  // NEW: Title for the quotation (helps identify revisions)
+  title: {
+    type: String
+  },
   date: {
     type: Date,
     required: true,
@@ -83,6 +87,15 @@ const quotationSchema = new mongoose.Schema({
     type: String,
     enum: ['draft', 'sent', 'accepted', 'rejected', 'expired'],
     default: 'draft'
+  },
+  // NEW: Revision tracking fields
+  revision_number: {
+    type: Number,
+    default: 0
+  },
+  revision_of: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Quotation'
   }
 }, {
   timestamps: true,
@@ -149,6 +162,21 @@ quotationSchema.pre('save', async function(next) {
       this.quotation_number = `${prefix}${nextNumber.toString().padStart(3, '0')}`;
     } catch (error) {
       return next(error);
+    }
+  }
+  
+  // NEW: Generate title if none provided
+  if (!this.title && this.party) {
+    try {
+      // Look up the party name to use in the title
+      const Party = mongoose.model('Party');
+      const party = await Party.findById(this.party);
+      if (party) {
+        this.title = `Quotation for ${party.name}`;
+      }
+    } catch (error) {
+      // Continue even if title generation fails
+      console.error('Error generating quotation title:', error);
     }
   }
   
