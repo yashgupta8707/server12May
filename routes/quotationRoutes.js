@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Quotation = require('../models/Quotation');
+const Quotation = require('../models/quotation');
 const Party = require('../models/party.model');
 
 // Debug middleware for quotation routes
