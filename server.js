@@ -18,7 +18,7 @@ const app = express();
 // Middleware
 // Enable CORS with specific options for local development
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173'],  // Allow both Create React App and Vite defaults
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'yashgupta.engineer', 'https://12-may-frontend.vercel.app'],  // Allow both Create React App and Vite defaults
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
