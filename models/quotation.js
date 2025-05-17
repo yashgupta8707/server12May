@@ -20,9 +20,22 @@ const quotationSchema = new mongoose.Schema(
       ref: 'Party',
       required: true,
     },
-    title: { type: String, required: true, unique: true },
-    date: { type: Date, default: Date.now },
-    valid_until: { type: Date },
+    quotation_number: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    title: { 
+      type: String,
+      required: true
+    },
+    date: { 
+      type: Date, 
+      default: Date.now 
+    },
+    valid_until: { 
+      type: Date 
+    },
     business_details: {
       name: String,
       address: String,
@@ -32,9 +45,18 @@ const quotationSchema = new mongoose.Schema(
       logo: String,
     },
     items: [itemSchema],
-    total_amount: Number,
-    total_purchase: Number,
-    total_tax: Number,
+    total_amount: {
+      type: Number,
+      default: 0
+    },
+    total_purchase: {
+      type: Number,
+      default: 0
+    },
+    total_tax: {
+      type: Number,
+      default: 0
+    },
     notes: String,
     terms_conditions: String,
     status: {
@@ -42,10 +64,31 @@ const quotationSchema = new mongoose.Schema(
       enum: ['draft', 'sent', 'accepted', 'rejected', 'expired'],
       default: 'draft',
     },
-    revision_number: { type: Number, default: 0 },
-    revision_of: { type: mongoose.Schema.Types.ObjectId, ref: 'Quotation' },
+    revision_number: { 
+      type: Number, 
+      default: 0 
+    },
+    revision_of: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'Quotation',
+      sparse: true
+    },
   },
-  { timestamps: true }
+  { 
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
 );
+
+// Add virtual for calculating margin
+quotationSchema.virtual('margin').get(function() {
+  return (this.total_amount || 0) - (this.total_purchase || 0);
+});
+
+quotationSchema.virtual('margin_percentage').get(function() {
+  if (!this.total_amount || this.total_amount === 0) return 0;
+  return (this.margin / this.total_amount) * 100;
+});
 
 module.exports = mongoose.model('Quotation', quotationSchema);
