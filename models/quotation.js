@@ -1,6 +1,8 @@
-// backend/models/Quotation.js
+// models/quotation.js - Fix for the OverwriteModelError
+
 const mongoose = require('mongoose');
 
+// Define schemas
 const itemSchema = new mongoose.Schema({
   category: String,
   brand: String,
@@ -81,7 +83,7 @@ const quotationSchema = new mongoose.Schema(
   }
 );
 
-// Add virtual for calculating margin
+// Virtual for calculating margin
 quotationSchema.virtual('margin').get(function() {
   return (this.total_amount || 0) - (this.total_purchase || 0);
 });
@@ -91,4 +93,6 @@ quotationSchema.virtual('margin_percentage').get(function() {
   return (this.margin / this.total_amount) * 100;
 });
 
-module.exports = mongoose.model('Quotation', quotationSchema);
+// Check if the model exists before creating a new one
+// This prevents the "OverwriteModelError: Cannot overwrite 'Quotation' model once compiled" error
+module.exports = mongoose.models.Quotation || mongoose.model('Quotation', quotationSchema);

@@ -1,10 +1,11 @@
-// backend/controllers/quotationController.js
-const Quotation = require('../models/quotation');
+// backend/controllers/quotationController.js - Complete implementation
+
+const Quotation = require('../models/Quotation');
 const Party = require('../models/party');
 const generateUniqueTitle = require('../utils/generateQuotationTitle');
 
-// POST /api/quotations
-const createQuotation = async (req, res) => {
+// Create a new quotation
+exports.createQuotation = async (req, res) => {
   try {
     const { party_id, ...quotationData } = req.body;
     
@@ -39,7 +40,7 @@ const createQuotation = async (req, res) => {
 };
 
 // Get all quotations with populated party data
-const getAllQuotations = async (req, res) => {
+exports.getAllQuotations = async (req, res) => {
   try {
     const quotations = await Quotation.find().populate('party_id');
     
@@ -70,7 +71,7 @@ const getAllQuotations = async (req, res) => {
 };
 
 // Get quotation by ID
-const getQuotationById = async (req, res) => {
+exports.getQuotationById = async (req, res) => {
   try {
     const quotation = await Quotation.findById(req.params.id).populate('party_id');
     
@@ -104,7 +105,13 @@ exports.getQuotationsByParty = async (req, res) => {
   try {
     const { partyId } = req.params;
     
+    // Log incoming request for debugging
+    console.log(`Fetching quotations for party ID: ${partyId}`);
+    
+    // Find quotations for this party
     const quotations = await Quotation.find({ party_id: partyId }).populate('party_id');
+    
+    console.log(`Found ${quotations.length} quotations for party ID: ${partyId}`);
     
     // Transform to match frontend expectations
     const transformedQuotations = quotations.map(quotation => {
@@ -128,9 +135,58 @@ exports.getQuotationsByParty = async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch quotations by party', error: error.message });
   }
 };
-module.exports = {
-  createQuotation,
-  getAllQuotations,
-  getQuotationById,
-  getQuotationsByParty,
+
+// Update a quotation
+exports.updateQuotation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const updatedQuotation = await Quotation.findByIdAndUpdate(
+      id, 
+      updateData, 
+      { new: true, runValidators: true }
+    ).populate('party_id');
+    
+    if (!updatedQuotation) {
+      return res.status(404).json({ message: 'Quotation not found' });
+    }
+    
+    // Transform for response
+    const quotationObj = updatedQuotation.toObject();
+    const totalPurchase = quotationObj.total_purchase || 0;
+    const totalAmount = quotationObj.total_amount || 0;
+    const margin = totalAmount - totalPurchase;
+    
+    const transformed = {
+      ...quotationObj,
+      party: quotationObj.party_id,
+      party_id: quotationObj.party_id?._id,
+      margin: margin,
+      margin_percentage: totalAmount > 0 ? (margin / totalAmount) * 100 : 0
+    };
+    
+    res.json(transformed);
+  } catch (error) {
+    console.error('Error updating quotation:', error);
+    res.status(500).json({ message: 'Failed to update quotation', error: error.message });
+  }
+};
+
+// Delete a quotation
+exports.deleteQuotation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const deletedQuotation = await Quotation.findByIdAndDelete(id);
+    
+    if (!deletedQuotation) {
+      return res.status(404).json({ message: 'Quotation not found' });
+    }
+    
+    res.json({ message: 'Quotation deleted successfully', deletedQuotation });
+  } catch (error) {
+    console.error('Error deleting quotation:', error);
+    res.status(500).json({ message: 'Failed to delete quotation', error: error.message });
+  }
 };
