@@ -41,32 +41,33 @@ exports.createQuotation = async (req, res) => {
 
 // Get all quotations with populated party data
 exports.getAllQuotations = async (req, res) => {
-  try {
-    const quotations = await Quotation.find().populate('party_id');
+   try {
+    const quotations = await Quotation.find()
+      .sort({ date: -1 }) // Sort by date, newest first
+      .populate('items.component', 'category brand')
+      .populate('customer', 'name email phone address');
     
-    // Transform the data to match the frontend expectations
+    // Transform the data to make it easier to work with in the frontend
     const transformedQuotations = quotations.map(quotation => {
-      const quotationObj = quotation.toObject();
-      
-      // Calculate margin
-      const totalPurchase = quotationObj.total_purchase || 0;
-      const totalAmount = quotationObj.total_amount || 0;
-      const margin = totalAmount - totalPurchase;
-      
-      // Rename party_id to party for frontend compatibility
       return {
-        ...quotationObj,
-        party: quotationObj.party_id, // This will be the populated party object
-        party_id: quotationObj.party_id?._id, // Keep original ID separately
-        margin: margin,
-        margin_percentage: totalAmount > 0 ? (margin / totalAmount) * 100 : 0
+        _id: quotation._id,
+        quotationNumber: quotation.quotationNumber,
+        date: quotation.date,
+        customerName: quotation.customer?.name || quotation.customerName,
+        customerEmail: quotation.customer?.email || quotation.customerEmail,
+        customerPhone: quotation.customer?.phone || quotation.customerPhone,
+        totalAmount: quotation.totalAmount,
+        status: quotation.status,
+        validUntil: quotation.validUntil,
+        items: quotation.items,
+        notes: quotation.notes
       };
     });
     
     res.json(transformedQuotations);
-  } catch (error) {
-    console.error('Error fetching quotations:', error);
-    res.status(500).json({ message: 'Failed to fetch quotations', error: error.message });
+  } catch (err) {
+    console.error('Error fetching quotations:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -176,17 +177,21 @@ exports.updateQuotation = async (req, res) => {
 // Delete a quotation
 exports.deleteQuotation = async (req, res) => {
   try {
-    const { id } = req.params;
+    const quotation = await Quotation.findById(req.params.id);
     
-    const deletedQuotation = await Quotation.findByIdAndDelete(id);
-    
-    if (!deletedQuotation) {
+    if (!quotation) {
       return res.status(404).json({ message: 'Quotation not found' });
     }
     
-    res.json({ message: 'Quotation deleted successfully', deletedQuotation });
-  } catch (error) {
-    console.error('Error deleting quotation:', error);
-    res.status(500).json({ message: 'Failed to delete quotation', error: error.message });
+    // Check if the user is authorized
+    if (quotation.created_by.toString() !== req.user.id) {
+      return res.status(401).json({ message: 'Not authorized to delete this quotation' });
+    }
+    
+    await quotation.remove();
+    res.json({ message: 'Quotation removed' });
+  } catch (err) {
+    console.error('Error deleting quotation:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 };
