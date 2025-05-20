@@ -1,14 +1,22 @@
 // backend/controllers/partyController.js
 const Party = require("../models/party");
 
+// Helper function for consistent error handling
+const handleError = (res, error, message) => {
+  console.error(`Error: ${message}`, error);
+  return res.status(500).json({ 
+    message: message || 'Server error',
+    error: process.env.NODE_ENV === 'development' ? error.message : undefined
+  });
+};
+
 // GET /api/parties
 const getAllParties = async (req, res) => {
   try {
     const parties = await Party.find().sort({ createdAt: -1 });
     res.json(parties);
   } catch (error) {
-    console.error("Error fetching parties:", error);
-    res.status(500).json({ message: "Failed to fetch parties." });
+    return handleError(res, error, "Failed to fetch parties");
   }
 };
 
@@ -19,8 +27,7 @@ const getPartyById = async (req, res) => {
     if (!party) return res.status(404).json({ message: "Party not found" });
     res.json(party);
   } catch (error) {
-    console.error("Error fetching party by ID:", error);
-    res.status(500).json({ message: "Failed to fetch party." });
+    return handleError(res, error, "Failed to fetch party");
   }
 };
 
@@ -34,7 +41,7 @@ const createParty = async (req, res) => {
       });
     }
     
-    // Generate the next party ID - Using 'P' format as shown in screenshots
+    // Generate the next party ID
     const latest = await Party.findOne().sort({ createdAt: -1 });
     let nextId = "P001"; // Default to P001 if no parties exist
     
@@ -58,6 +65,7 @@ const createParty = async (req, res) => {
       name: req.body.name,
       phone: req.body.phone,
       address: req.body.address || "",
+      email: req.body.email || ""
     });
     
     // Save to database
@@ -66,16 +74,15 @@ const createParty = async (req, res) => {
     res.status(201).json(savedParty);
     
   } catch (error) {
-    console.error("Error creating party:", error);
-    // Send detailed error for debugging
-    res.status(500).json({ 
-      message: "Failed to create party",
-      error: error.message,
-      code: error.code,
-      name: error.name,
-      keyPattern: error.keyPattern || undefined,
-      keyValue: error.keyValue || undefined
-    });
+    // Check for duplicate key error
+    if (error.code === 11000) {
+      return res.status(400).json({
+        message: "A party with this ID already exists",
+        error: error.message
+      });
+    }
+    
+    return handleError(res, error, "Failed to create party");
   }
 };
 
@@ -93,6 +100,8 @@ const updateParty = async (req, res) => {
         name: req.body.name,
         phone: req.body.phone,
         address: req.body.address || "",
+        email: req.body.email || "",
+        updatedAt: new Date()
       },
       { new: true, runValidators: true }
     );
@@ -103,11 +112,7 @@ const updateParty = async (req, res) => {
     
     res.json(updatedParty);
   } catch (error) {
-    console.error("Error updating party:", error);
-    res.status(500).json({ 
-      message: "Failed to update party",
-      error: error.message
-    });
+    return handleError(res, error, "Failed to update party");
   }
 };
 
@@ -120,10 +125,9 @@ const deleteParty = async (req, res) => {
       return res.status(404).json({ message: "Party not found" });
     }
     
-    res.json({ message: "Party deleted successfully" });
+    res.json({ message: "Party deleted successfully", party: deletedParty });
   } catch (error) {
-    console.error("Error deleting party:", error);
-    res.status(500).json({ message: "Failed to delete party" });
+    return handleError(res, error, "Failed to delete party");
   }
 };
 

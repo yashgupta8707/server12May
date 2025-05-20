@@ -1,15 +1,40 @@
-// models/Component.js
+// backend/models/component.js
 const mongoose = require('mongoose');
 
-const ComponentSchema = new mongoose.Schema({
-  category: String,
-  brand: String,
-  model: String,
-  HSN_SAC: String,
+const componentModelSchema = new mongoose.Schema({
+  model: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  HSN_SAC: {
+    type: String,
+    default: "84733099",
+    trim: true
+  },
   warranty: String,
-  purchase_with_GST: Number,
-  sale_with_GST: Number
+  purchase_with_GST: {
+    type: Number,
+    default: 0
+  },
+  sale_with_GST: {
+    type: Number,
+    default: 0
+  }
 });
 
-const Component = mongoose.model('Component', ComponentSchema);
-module.exports = Component;
+const componentSchema = new mongoose.Schema({
+  category: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  brand: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  models: [componentModelSchema]
+}, { timestamps: true });
+
+module.exports = mongoose.model('Component', componentSchema);

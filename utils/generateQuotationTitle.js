@@ -1,22 +1,24 @@
 // backend/utils/generateQuotationTitle.js
 const Quotation = require('../models/quotation');
 
-// Generate next available title with versioning
-const generateUniqueTitle = async (baseTitle) => {
-  const existing = await Quotation.find({ title: new RegExp(`^${baseTitle}(_v\\d+)?$`) });
-
-  if (existing.length === 0) return baseTitle;
-
-  let maxVersion = 0;
-  existing.forEach((quote) => {
-    const match = quote.title.match(/_v(\d+)$/);
-    if (match) {
-      const version = parseInt(match[1]);
-      if (version > maxVersion) maxVersion = version;
-    }
+/**
+ * Generates a unique quotation title by appending a number if necessary
+ * @param {string} baseTitle - The base title to use
+ * @returns {Promise<string>} - A unique title
+ */
+async function generateUniqueTitle(baseTitle) {
+  // Count existing quotations with similar title
+  const count = await Quotation.countDocuments({
+    title: new RegExp(`^${baseTitle}`, 'i')  // Case-insensitive match at start of string
   });
-
-  return `${baseTitle}_v${maxVersion + 1}`;
-};
+  
+  // If no similar titles exist, use the base title
+  if (count === 0) {
+    return baseTitle;
+  }
+  
+  // Otherwise, append a number
+  return `${baseTitle}_${count + 1}`;
+}
 
 module.exports = generateUniqueTitle;

@@ -1,18 +1,27 @@
-// backend/models/Component.js
-const mongoose = require('mongoose');
+// backend/routes/components.js
+const express = require('express');
+const router = express.Router();
+const {
+  getAllComponents,
+  getComponentById,
+  createComponent,
+  updateComponent,
+  deleteComponent
+} = require('../controllers/componentController');
 
-const componentModelSchema = new mongoose.Schema({
-  model: String,
-  HSN_SAC: String,
-  warranty: String,
-  purchase_with_GST: Number,
-  sale_with_GST: Number,
-});
+// GET /api/components - Get all components
+router.get('/', getAllComponents);
 
-const componentSchema = new mongoose.Schema({
-  category: String,
-  brand: String,
-  models: [componentModelSchema],
-});
+// GET /api/components/:id - Get component by ID
+router.get('/:id', getComponentById);
 
-module.exports = mongoose.model('Component', componentSchema);
+// POST /api/components - Create a new component
+router.post('/', createComponent);
+
+// PUT /api/components/:id - Update a component
+router.put('/:id', updateComponent);
+
+// DELETE /api/components/:id - Delete a component
+router.delete('/:id', deleteComponent);
+
+module.exports = router;

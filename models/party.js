@@ -4,28 +4,38 @@ const mongoose = require('mongoose');
 const partySchema = new mongoose.Schema({
   partyId: {
     type: String,
-    unique: true,
     required: true,
+    unique: true,
+    trim: true
   },
   name: {
     type: String,
-    required: true,
+    required: [true, 'Party name is required'],
     trim: true
   },
   phone: {
     type: String,
-    required: true,
+    required: [true, 'Phone number is required'],
     trim: true
   },
   address: {
     type: String,
+    trim: true
+  },
+  email: {
+    type: String,
     trim: true,
-    default: ""
+    lowercase: true,
+    match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
 }, { timestamps: true });
 
-// Make id field index sparse to allow multiple null values
-partySchema.index({ id: 1 }, { unique: true, sparse: true });
-
-const Party = mongoose.model('Party', partySchema);
-module.exports = Party;
+module.exports = mongoose.model('Party', partySchema);

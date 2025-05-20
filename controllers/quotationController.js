@@ -1,8 +1,39 @@
-// backend/controllers/quotationController.js - Complete implementation
-
-const Quotation = require('../models/Quotation');
+// backend/controllers/quotationController.js
+const Quotation = require('../models/quotation');
 const Party = require('../models/party');
-const generateUniqueTitle = require('../utils/generateQuotationTitle');
+
+// Helper function for consistent error handling
+const handleError = (res, error, message) => {
+  console.error(`Error: ${message}`, error);
+  return res.status(500).json({ 
+    message: message || 'Server error',
+    error: process.env.NODE_ENV === 'development' ? error.message : undefined
+  });
+};
+
+// Helper function to transform quotation data for consistent frontend response
+const transformQuotation = (quotation) => {
+  if (!quotation) return null;
+  
+  const quotationObj = quotation.toObject ? quotation.toObject() : quotation;
+  const totalPurchase = quotationObj.total_purchase || 0;
+  const totalAmount = quotationObj.total_amount || 0;
+  const margin = totalAmount - totalPurchase;
+  
+  return {
+    ...quotationObj,
+    // Ensure party data is available in both .party and .party_id for compatibility
+    party: quotationObj.party_id,
+    margin: margin,
+    margin_percentage: totalAmount > 0 ? (margin / totalAmount) * 100 : 0
+  };
+};
+
+// Generate a unique title if not provided
+const generateUniqueTitle = async (baseTitle) => {
+  const count = await Quotation.countDocuments({ title: new RegExp(`^${baseTitle}`, 'i') });
+  return count > 0 ? `${baseTitle}_${count + 1}` : baseTitle;
+};
 
 // Create a new quotation
 exports.createQuotation = async (req, res) => {
@@ -29,45 +60,27 @@ exports.createQuotation = async (req, res) => {
     const savedQuotation = await newQuotation.save();
     
     // Populate the party information for the response
-    const populatedQuotation = await Quotation.findById(savedQuotation._id);
-    await populatedQuotation.populate('party_id');
+    await savedQuotation.populate('party_id');
     
-    res.status(201).json(populatedQuotation);
+    res.status(201).json(transformQuotation(savedQuotation));
   } catch (error) {
-    console.error('Error creating quotation:', error);
-    res.status(500).json({ message: 'Failed to create quotation', error: error.message });
+    return handleError(res, error, 'Failed to create quotation');
   }
 };
 
 // Get all quotations with populated party data
 exports.getAllQuotations = async (req, res) => {
-   try {
+  try {
     const quotations = await Quotation.find()
       .sort({ date: -1 }) // Sort by date, newest first
-      .populate('items.component', 'category brand')
-      .populate('customer', 'name email phone address');
+      .populate('party_id');
     
-    // Transform the data to make it easier to work with in the frontend
-    const transformedQuotations = quotations.map(quotation => {
-      return {
-        _id: quotation._id,
-        quotationNumber: quotation.quotationNumber,
-        date: quotation.date,
-        customerName: quotation.customer?.name || quotation.customerName,
-        customerEmail: quotation.customer?.email || quotation.customerEmail,
-        customerPhone: quotation.customer?.phone || quotation.customerPhone,
-        totalAmount: quotation.totalAmount,
-        status: quotation.status,
-        validUntil: quotation.validUntil,
-        items: quotation.items,
-        notes: quotation.notes
-      };
-    });
+    // Transform the data for frontend consistency
+    const transformedQuotations = quotations.map(transformQuotation);
     
     res.json(transformedQuotations);
-  } catch (err) {
-    console.error('Error fetching quotations:', err);
-    res.status(500).json({ message: 'Server error' });
+  } catch (error) {
+    return handleError(res, error, 'Failed to fetch quotations');
   }
 };
 
@@ -80,24 +93,9 @@ exports.getQuotationById = async (req, res) => {
       return res.status(404).json({ message: 'Quotation not found' });
     }
     
-    // Transform to match frontend expectations
-    const quotationObj = quotation.toObject();
-    const totalPurchase = quotationObj.total_purchase || 0;
-    const totalAmount = quotationObj.total_amount || 0;
-    const margin = totalAmount - totalPurchase;
-    
-    const transformed = {
-      ...quotationObj,
-      party: quotationObj.party_id,
-      party_id: quotationObj.party_id?._id,
-      margin: margin,
-      margin_percentage: totalAmount > 0 ? (margin / totalAmount) * 100 : 0
-    };
-    
-    res.json(transformed);
+    res.json(transformQuotation(quotation));
   } catch (error) {
-    console.error('Error fetching quotation:', error);
-    res.status(500).json({ message: 'Failed to fetch quotation', error: error.message });
+    return handleError(res, error, 'Failed to fetch quotation');
   }
 };
 
@@ -106,7 +104,6 @@ exports.getQuotationsByParty = async (req, res) => {
   try {
     const { partyId } = req.params;
     
-    // Log incoming request for debugging
     console.log(`Fetching quotations for party ID: ${partyId}`);
     
     // Find quotations for this party
@@ -114,26 +111,12 @@ exports.getQuotationsByParty = async (req, res) => {
     
     console.log(`Found ${quotations.length} quotations for party ID: ${partyId}`);
     
-    // Transform to match frontend expectations
-    const transformedQuotations = quotations.map(quotation => {
-      const quotationObj = quotation.toObject();
-      const totalPurchase = quotationObj.total_purchase || 0;
-      const totalAmount = quotationObj.total_amount || 0;
-      const margin = totalAmount - totalPurchase;
-      
-      return {
-        ...quotationObj,
-        party: quotationObj.party_id,
-        party_id: quotationObj.party_id?._id,
-        margin: margin,
-        margin_percentage: totalAmount > 0 ? (margin / totalAmount) * 100 : 0
-      };
-    });
+    // Transform for frontend consistency
+    const transformedQuotations = quotations.map(transformQuotation);
     
     res.json(transformedQuotations);
   } catch (error) {
-    console.error('Error fetching quotations by party:', error);
-    res.status(500).json({ message: 'Failed to fetch quotations by party', error: error.message });
+    return handleError(res, error, 'Failed to fetch quotations by party');
   }
 };
 
@@ -142,6 +125,9 @@ exports.updateQuotation = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
+    
+    // Add updated timestamp
+    updateData.updatedAt = new Date();
     
     const updatedQuotation = await Quotation.findByIdAndUpdate(
       id, 
@@ -153,24 +139,9 @@ exports.updateQuotation = async (req, res) => {
       return res.status(404).json({ message: 'Quotation not found' });
     }
     
-    // Transform for response
-    const quotationObj = updatedQuotation.toObject();
-    const totalPurchase = quotationObj.total_purchase || 0;
-    const totalAmount = quotationObj.total_amount || 0;
-    const margin = totalAmount - totalPurchase;
-    
-    const transformed = {
-      ...quotationObj,
-      party: quotationObj.party_id,
-      party_id: quotationObj.party_id?._id,
-      margin: margin,
-      margin_percentage: totalAmount > 0 ? (margin / totalAmount) * 100 : 0
-    };
-    
-    res.json(transformed);
+    res.json(transformQuotation(updatedQuotation));
   } catch (error) {
-    console.error('Error updating quotation:', error);
-    res.status(500).json({ message: 'Failed to update quotation', error: error.message });
+    return handleError(res, error, 'Failed to update quotation');
   }
 };
 
@@ -183,15 +154,110 @@ exports.deleteQuotation = async (req, res) => {
       return res.status(404).json({ message: 'Quotation not found' });
     }
     
-    // Check if the user is authorized
-    if (quotation.created_by.toString() !== req.user.id) {
-      return res.status(401).json({ message: 'Not authorized to delete this quotation' });
+    // Remove authentication check since we don't have auth implemented
+    await Quotation.findByIdAndDelete(req.params.id);
+    res.json({ 
+      message: 'Quotation removed successfully',
+      quotation: transformQuotation(quotation)
+    });
+  } catch (error) {
+    return handleError(res, error, 'Failed to delete quotation');
+  }
+};
+
+// Create a revision of an existing quotation
+exports.createQuotationRevision = async (req, res) => {
+  try {
+    const originalQuotationId = req.params.id;
+    
+    // Find the original quotation
+    const originalQuotation = await Quotation.findById(originalQuotationId).populate('party_id');
+    
+    if (!originalQuotation) {
+      return res.status(404).json({ message: 'Original quotation not found' });
     }
     
-    await quotation.remove();
-    res.json({ message: 'Quotation removed' });
-  } catch (err) {
-    console.error('Error deleting quotation:', err);
-    res.status(500).json({ message: 'Server error' });
+    // Determine the revision number
+    let revisionNumber = 1;
+    
+    // If we already have a revision_number, increment it
+    if (originalQuotation.revision_number) {
+      revisionNumber = parseInt(originalQuotation.revision_number, 10) + 1;
+    } 
+    // Otherwise check if there's a version in the title with our format
+    else if (originalQuotation.title) {
+      const versionMatch = originalQuotation.title.match(/quote-.*?-(\d+)$/);
+      if (versionMatch) {
+        revisionNumber = parseInt(versionMatch[1], 10) + 1;
+      }
+    }
+    
+    // Generate the new quotation number in our format
+    const partyId = originalQuotation.party_id?._id?.toString() || '';
+    const shortPartyId = partyId.substring(0, 8);
+    const newQuotationNumber = `quote-${shortPartyId}-${revisionNumber}`;
+    
+    // Custom fields from request body
+    const { title, notes } = req.body;
+    
+    // Create a new quotation based on the original
+    const newQuotation = new Quotation({
+      party_id: originalQuotation.party_id,
+      title: title || newQuotationNumber,
+      quotation_number: newQuotationNumber,
+      date: new Date(),
+      valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Default 30 days
+      business_details: originalQuotation.business_details,
+      items: originalQuotation.items,
+      total_amount: originalQuotation.total_amount,
+      total_purchase: originalQuotation.total_purchase,
+      total_tax: originalQuotation.total_tax,
+      notes: notes || originalQuotation.notes,
+      terms_conditions: originalQuotation.terms_conditions,
+      status: 'draft', // New revision always starts as draft
+      revision_of: originalQuotationId,
+      revision_number: revisionNumber
+    });
+    
+    const savedRevision = await newQuotation.save();
+    
+    // Populate for response
+    await savedRevision.populate('party_id');
+    
+    res.json(transformQuotation(savedRevision));
+  } catch (error) {
+    return handleError(res, error, 'Failed to create quotation revision');
+  }
+};
+
+// Get all revisions of a quotation
+exports.getQuotationRevisions = async (req, res) => {
+  try {
+    const originalId = req.params.id;
+    
+    // First, check if the quotation exists
+    const quotation = await Quotation.findById(originalId);
+    
+    if (!quotation) {
+      return res.status(404).json({ message: 'Quotation not found' });
+    }
+    
+    // If this is already a revision, find the original
+    const rootId = quotation.revision_of || originalId;
+    
+    // Find all revisions related to this quotation
+    const revisions = await Quotation.find({
+      $or: [
+        { _id: rootId },
+        { revision_of: rootId }
+      ]
+    }).populate('party_id').sort({ revision_number: 1, date: 1 });
+    
+    // Transform for frontend consistency
+    const transformedRevisions = revisions.map(transformQuotation);
+    
+    res.json(transformedRevisions);
+  } catch (error) {
+    return handleError(res, error, 'Failed to fetch quotation revisions');
   }
 };
